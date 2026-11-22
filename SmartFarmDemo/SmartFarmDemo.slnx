@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SmartFarmDemo.Client/SmartFarmDemo.Client.csproj" />
+    <Project Path="src/SmartFarmDemo.Contracts/SmartFarmDemo.Contracts.csproj" />
+    <Project Path="src/SmartFarmDemo.Daemon/SmartFarmDemo.Daemon.csproj" />
+  </Folder>
+</Solution>
