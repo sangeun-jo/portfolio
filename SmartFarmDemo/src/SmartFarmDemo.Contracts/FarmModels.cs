@@ -24,3 +24,10 @@ public sealed record ChatMessage(
     string Content,
     DateTimeOffset Timestamp,
     string? ImageBase64 = null);
+
+public sealed record ChatRequest(string Message);
+
+public sealed record ChatResponse(
+    string Reply,
+    IReadOnlyList<string> ToolTrace,
+    string? ImageBase64 = null);

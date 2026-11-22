@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SmartFarmDemo — Digital Twin</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e1420;color:#e8eef7;font-family:Pretendard,'Segoe UI',sans-serif;overflow:hidden}
+  #app{position:fixed;inset:0}
+  #hud{position:fixed;top:16px;left:16px;z-index:10;background:rgba(16,24,38,.82);border:1px solid #2a3a55;border-radius:12px;padding:14px 18px;backdrop-filter:blur(6px);min-width:220px}
+  #hud h1{margin:0 0 10px;font-size:15px;color:#7fb2ff;letter-spacing:.05em}
+  .row{display:flex;justify-content:space-between;gap:18px;font-size:14px;padding:3px 0}
+  .row b{font-variant-numeric:tabular-nums;color:#fff}
+  .row span{color:#8fa3c0}
+  #lightBadge{display:inline-block;margin-top:8px;font-size:12px;font-weight:700;padding:2px 10px;border-radius:99px;background:#3a2530;color:#ff8fa3}
+  #lightBadge.on{background:#1f4d2e;color:#7dffb0}
+  #hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);font-size:12px;color:#5d7191;z-index:10}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="hud">
+  <h1>SMART FARM · DIGITAL TWIN</h1>
+  <div class="row"><span>온도</span><b id="temp">--</b></div>
+  <div class="row"><span>습도</span><b id="hum">--</b></div>
+  <div class="row"><span>조도</span><b id="lux">--</b></div>
+  <div class="row"><span>최근 업데이트</span><b id="ts">--</b></div>
+  <span id="lightBadge">LIGHT OFF</span>
+</div>
+<div id="hint">데이터는 /api/status 폴링 · 조명 상태는 /api/light 와 동기화</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const app = document.getElementById('app');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1420);
+scene.fog = new THREE.Fog(0x0e1420, 18, 42);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 100);
+camera.position.set(7, 6, 9);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+app.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1, 0);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * .49;
+
+scene.add(new THREE.HemisphereLight(0xbdd4ff, 0x1c2a1c, .55));
+const sun = new THREE.DirectionalLight(0xfff2d0, .35);
+sun.position.set(6, 10, 4);
+sun.castShadow = true;
+scene.add(sun);
+
+const growLight = new THREE.PointLight(0xffe9a8, 0, 14);
+growLight.position.set(0, 4.5, 0);
+scene.add(growLight);
+
+// Ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(24, 24),
+  new THREE.MeshStandardMaterial({ color: 0x24402a, roughness: 1 }));
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Grid
+const grid = new THREE.GridHelper(24, 24, 0x3a5a44, 0x2a4433);
+grid.position.y = .01;
+scene.add(grid);
+
+// Greenhouse frame posts
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x8fa3b8, roughness: .6, metalness: .4 });
+for (const [x,z] of [[-5,-5],[5,-5],[-5,5],[5,5]]) {
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,3.4,10), frameMat);
+  post.position.set(x,1.7,z); post.castShadow = true; scene.add(post);
+}
+const beamMat = frameMat;
+for (const y of [3.4]) {
+  for (const rot of [0, Math.PI/2]) {
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(10.4,.12,.12), beamMat);
+    beam.position.y = y; beam.rotation.y = rot; scene.add(beam);
+  }
+}
+
+// Plants: pot + soil + stem + leaves
+const plants = [];
+const stemMat = new THREE.MeshStandardMaterial({ color: 0x4e9a51, roughness: .8 });
+const leafMat = new THREE.MeshStandardMaterial({ color: 0x63b86b, roughness: .7, side: THREE.DoubleSide });
+const potMat = new THREE.MeshStandardMaterial({ color: 0xa0643c, roughness: .9 });
+const soilMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1c, roughness: 1 });
+
+for (let i = 0; i < 6; i++) {
+  const gx = (i % 3 - 1) * 2.6;
+  const gz = (Math.floor(i / 3) - .5) * 3.4;
+  const plant = new THREE.Group();
+  plant.position.set(gx, 0, gz);
+
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(.55,.42,.5,14), potMat);
+  pot.position.y = .25; pot.castShadow = true; plant.add(pot);
+  const soil = new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.06,14), soilMat);
+  soil.position.y = .5; plant.add(soil);
+
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(.05,.07,1.1,8), stemMat);
+  stem.position.y = 1.05; stem.castShadow = true; plant.add(stem);
+
+  for (let l = 0; l < 5; l++) {
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(.22, 10, 8), leafMat);
+    const a = l / 5 * Math.PI * 2;
+    leaf.scale.set(1, .45, 1.8);
+    leaf.position.set(Math.cos(a)*.3, .9 + l * .18, Math.sin(a)*.3);
+    leaf.rotation.y = -a;
+    leaf.castShadow = true;
+    plant.add(leaf);
+  }
+  scene.add(plant);
+  plants.push(plant);
+}
+
+// Grow light bar
+const barMat = new THREE.MeshStandardMaterial({ color: 0x333a44, roughness: .5, metalness: .6 });
+const bar = new THREE.Mesh(new THREE.BoxGeometry(5.4,.1,.3), barMat);
+bar.position.set(0, 3.6, 0);
+scene.add(bar);
+const tubeMat = new THREE.MeshStandardMaterial({
+  color: 0xfff3c4, emissive: 0xffe9a8, emissiveIntensity: 0 });
+const tube = new THREE.Mesh(new THREE.BoxGeometry(5.2,.06,.2), tubeMat);
+tube.position.set(0, 3.53, 0);
+scene.add(tube);
+
+// Camera prop on tripod
+const camMat = new THREE.MeshStandardMaterial({ color: 0x222831, roughness: .4 });
+const camBody = new THREE.Mesh(new THREE.BoxGeometry(.5,.32,.7), camMat);
+camBody.position.set(4.6, 1.9, -3.4); camBody.lookAt(0,1,0); camBody.castShadow = true;
+scene.add(camBody);
+const lens = new THREE.Mesh(new THREE.CylinderGeometry(.14,.18,.3,16),
+  new THREE.MeshStandardMaterial({ color: 0x11151c, roughness: .2, metalness: .7 }));
+lens.rotation.x = Math.PI/2;
+lens.position.set(4.6, 1.9, -3.05);
+scene.add(lens);
+const legGeo = new THREE.CylinderGeometry(.03,.03,1.9,6);
+for (const [dx,dz] of [[-.3,-.3],[.3,-.3],[-.3,.3],[.3,.3]]) {
+  const leg = new THREE.Mesh(legGeo, frameMat);
+  leg.position.set(4.6+dx*.7, .95, -3.4+dz*.7);
+  leg.rotation.z = dx*.35; leg.rotation.x = -dz*.35;
+  scene.add(leg);
+}
+
+// Sensor node prop
+const node = new THREE.Mesh(new THREE.BoxGeometry(.4,.25,.3),
+  new THREE.MeshStandardMaterial({ color: 0x2e6f8e, roughness: .5 }));
+node.position.set(-4.4, 1.4, -3.2); node.castShadow = true;
+scene.add(node);
+const nodePole = new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,1.4,8), frameMat);
+nodePole.position.set(-4.4, .7, -3.2); scene.add(nodePole);
+
+// HUD polling
+const $ = id => document.getElementById(id);
+let lightOn = false;
+
+async function poll() {
+  try {
+    const s = await (await fetch('/api/status')).json();
+    const l = s.latest;
+    $('temp').textContent = l.temperatureC.toFixed(1) + ' °C';
+    $('hum').textContent = l.humidityPercent.toFixed(0) + ' %';
+    $('lux').textContent = Math.round(l.illuminanceLux).toLocaleString() + ' lx';
+    $('ts').textContent = new Date(l.timestamp).toLocaleTimeString();
+    setLight(s.light === 'On' || s.light === 'on');
+  } catch { $('ts').textContent = '연결 끊김'; }
+}
+setInterval(poll, 2000); poll();
+
+function setLight(on) {
+  lightOn = on;
+  growLight.intensity = on ? 2.2 : 0;
+  tubeMat.emissiveIntensity = on ? 2.4 : 0;
+  tubeMat.color.setHex(on ? 0xfff6d8 : 0xfff3c4);
+  $('lightBadge').textContent = on ? 'LIGHT ON' : 'LIGHT OFF';
+  $('lightBadge').className = on ? 'on' : '';
+}
+
+// Gentle plant sway
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  plants.forEach((p, i) => {
+    p.rotation.z = Math.sin(t * .8 + i) * .02;
+    p.rotation.x = Math.cos(t * .6 + i * 1.3) * .015;
+  });
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
