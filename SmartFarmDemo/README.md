@@ -73,6 +73,7 @@
 cd SmartFarmDemo/src/SmartFarmDemo.Daemon
 dotnet run          # http://localhost:5080
                      # /twin  디지털트윈
+                     # /bugsfarm/ 벅스팜 3D 데모 (구역 선택·비전 촬영 미리보기)
                      # /voice 음성 대화 (폰 브라우저 권장)
 ```
 
