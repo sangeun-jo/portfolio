@@ -1,5 +1,9 @@
 # SmartFarmDemo
 
+## Quick Start 
+```
+dotnet run --project .\SmartFarmDemo\src\SmartFarmDemo.Daemon
+```
 미니 스마트팜을 LLM 에이전트가 자연어·음성으로 제어하는 멀티 클라이언트 데모.
 "조도 어때?", "조명 켜줘", "사진 찍어줘" 한 마디로 센서 조회·조명 제어·카메라 촬영이 실행된다.
 
@@ -10,7 +14,7 @@
 | **폰 (브라우저)** | AI 음성 대화 | OpenAI Realtime API + WebRTC |
 | **WPF 앱** | 센서 모니터링 + 수동 제어 | .NET 10, WPF/MVVM |
 | **웹 (/twin)** | 디지털트윈 3D 시각화 | Three.js / WebGL |
-| **MCP 클라이언트** (예정) | Claude/ChatGPT 앱에서 자연어·음성 제어 | MCP 서버 (C# SDK) |
+| **MCP 클라이언트** | 센서 조회와 전체 조명 제어 | MCP Streamable HTTP (C# SDK) |
 
 모두 하나의 데몬(`localhost:5080`) 뒤에 붙는다 — 스마트팩토리의 "엣지 수집 → 플랫폼 → HMI/클라이언트" 구조를 그대로 따른다.
 
@@ -27,7 +31,7 @@
          ├─ /api/light  /api/photo     조명·카메라 제어
          ├─ /api/chat                  텍스트 에이전트 (function calling)
          ├─ /api/voice-token           Realtime 음성 세션 토큰
-         ├─ /mcp                        MCP 서버 (예정, C# SDK)
+         ├─ /mcp                        MCP 센서 조회·전체 조명 제어
          ├─ FarmSimulator              센서/조명/사진 시뮬레이션
          └─ AgentService               OpenAI tool-loop
                    │  (예정) MQTT/HTTP
@@ -47,9 +51,9 @@
 - [x] 데몬: ASP.NET Core API + 센서 시뮬레이터 (2초 틱)
 - [x] 텍스트 에이전트: OpenAI function calling — `get_environment`, `get_history`, `set_light`, `capture_photo`
 - [x] 음성 페이지: `/voice` — Realtime API ephemeral token + WebRTC (모바일 브라우저 대응)
-- [x] 디지털트윈: `/twin` — Three.js 온실 씬 (조명 on/off에 성장등·조도 연동)
+- [x] 디지털트윈: `/twin/` — 마이팜 3D 모델, 전체 조명 제어, 온도·습도·조도 표시
 - [x] WPF 앱: 센서 카드 + 스파크라인 + 조명 토글 + 카메라 촬영
-- [ ] **MCP 서버** (C# `ModelContextProtocol` SDK): farm tools를 Claude Desktop/ChatGPT에 노출 — 음성은 클라이언트 앱 내장 모드 활용, 원격 접속은 Tailscale+HTTP 전송 검토
+- [x] **MCP 서버** (C# `ModelContextProtocol` SDK): 센서 조회와 전체 조명 제어
 - [ ] 라즈베리파이 엣지 노드 (MQTT 브릿지) — 하드웨어 도착 후, **별도 리포지토리**에서 개발
 - [ ] 음성 세션에 farm tools 연동 (Realtime function calling)
 - [ ] 텔레메트리 이력 DB (EF Core)
@@ -72,8 +76,7 @@
 ```bash
 cd SmartFarmDemo/src/SmartFarmDemo.Daemon
 dotnet run          # http://localhost:5080
-                     # /twin  디지털트윈
-                     # /bugsfarm/ 벅스팜 3D 데모 (구역 선택·비전 촬영 미리보기)
+                     # /twin/ 마이팜 3D 디지털트윈
                      # /voice 음성 대화 (폰 브라우저 권장)
 ```
 
@@ -85,6 +88,19 @@ OPENAI_MODEL=gpt-4o-mini
 OPENAI_REALTIME_MODEL=gpt-realtime-2.1
 OPENAI_REALTIME_VOICE=marin
 ```
+
+## MCP 연결
+
+데몬을 실행하면 `http://localhost:5080/mcp`에서 Streamable HTTP로 연결할 수 있다. 두 도구는 `/twin/`과 같은 시뮬레이터를 사용한다.
+
+| 도구 | 예시 |
+|---|---|
+| `get_environment` | “지금 온도 몇 도야?” — 온도·습도·조도·조명 상태 조회 |
+| `set_light` | “조명 꺼줘” — `{"on": false}`로 전체 조명 끄기 |
+
+ChatGPT에서는 [Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)의 로컬 HTTP 대상으로 위 주소를 지정한 후 **Plugins → + → Add custom MCP server → Tunnel**에서 등록한다. 먼저 채팅에서 도구를 확인하고, Live에서 플러그인을 사용할 수 있는 계정이라면 음성으로 요청한다. 조명 변경에 승인이 요구되면 화면에서 승인한다. [ChatGPT Voice 안내](https://help.openai.com/en/articles/20001274-chatgpt-voice)
+
+Claude의 웹 커넥터에서는 **Customize → Connectors → Add → Custom → Web**에서 Claude가 접근할 수 있는 인증된 HTTPS MCP 주소를 등록한다. 로컬 주소는 이 방식으로 연결할 수 없다. [Claude 원격 MCP 연결 안내](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
 
 ## 프로젝트 구조
 

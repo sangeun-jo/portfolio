@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using SmartFarmDemo.Contracts;
 using SmartFarmDemo.Daemon;
+using SmartFarmDemo.Daemon.Mcp;
 
 LoadDotEnv();
 
@@ -11,12 +12,17 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<FarmSimulator>();
 builder.Services.AddSingleton<AgentService>();
+builder.Services.AddMcpServer()
+    .WithHttpTransport()
+    .WithTools<FarmTools>();
 builder.Services.AddHttpClient("openai", c => c.BaseAddress = new Uri("https://api.openai.com"));
 
 var app = builder.Build();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+app.MapMcp("/mcp");
 
 app.MapGet("/api/status", (FarmSimulator farm) => farm.GetStatus());
 app.MapGet("/api/history", (FarmSimulator farm, int? limit) => farm.GetHistory(limit ?? 120));
